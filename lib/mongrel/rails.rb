@@ -53,17 +53,22 @@ module Mongrel
         path_info = request.params[Mongrel::Const::PATH_INFO]
         rest_operator = request.params[Mongrel::Const::REQUEST_URI][/^#{Regexp.escape path_info}(;[^\?]+)/, 1].to_s
         path_info.chomp!("/")
+        path_info = "/index" if path_info.empty?
         
-        page_cached = path_info + rest_operator + ActionController::Base.page_cache_extension
+        do_caching = ActionController::Base.perform_caching
+        cache_dir = ActionController::Base.page_cache_directory
+        cache_dir.chomp!("/")
+        
+        page_cached = cache_dir + path_info + rest_operator + ActionController::Base.page_cache_extension
         get_or_head = @@file_only_methods.include? request.params[Mongrel::Const::REQUEST_METHOD]
 
         if get_or_head and @files.can_serve(path_info)
           # File exists as-is so serve it up
           @files.process(request,response)
-        elsif get_or_head and @files.can_serve(page_cached)
+        elsif do_caching and get_or_head and (files = Mongrel::DirHandler.new(nil,false)).can_serve(page_cached);
           # Possible cached page, serve it up
           request.params[Mongrel::Const::PATH_INFO] = page_cached
-          @files.process(request,response)
+          files.process(request,response)
         else
           begin
             cgi = Mongrel::CGIWrapper.new(request, response)
